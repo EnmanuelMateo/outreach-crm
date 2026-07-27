@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+crm.db
+crm.db-journal
+.venv/
+venv/
+.DS_Store

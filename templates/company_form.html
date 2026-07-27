@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Nueva empresa' if mode=='new' else 'Editar' }} — Outreach · CRM{% endblock %}
+{% block content %}
+
+<form method="post" action="{{ url_for('company_new') if mode=='new' else url_for('company_edit', company_id=c.id) }}">
+
+  {% if mode == 'new' %}
+    <div class="lbl" style="color:var(--color-accent)">Captura rápida</div>
+    <h1 class="page" style="margin:7px 0 4px">Nueva empresa</h1>
+    <p style="font:400 12.5px/1.5 var(--font-body);color:var(--ink-3);margin:0 0 4px">Tres campos. El resto se completa después.</p>
+  {% else %}
+    <h1 class="page">Editar empresa</h1>
+  {% endif %}
+
+  <label for="company_name">Nombre</label>
+  <input id="company_name" class="lead" name="company_name" required autofocus autocomplete="off"
+         value="{{ c.company_name or '' }}" placeholder="Ferretería El Progreso">
+
+  <label for="phone">Teléfono</label>
+  <input id="phone" name="phone" type="tel" inputmode="tel" value="{{ c.phone or '' }}" placeholder="809-">
+
+  <div class="flabel">Sector</div>
+  <div class="chips">
+    {% for s in SECTORS %}
+    <input type="radio" id="sec_{{ loop.index }}" name="sector" value="{{ s }}" {{ 'checked' if c.sector==s }}>
+    <label for="sec_{{ loop.index }}">{{ s }}</label>
+    {% endfor %}
+  </div>
+
+  {% if mode == 'new' %}
+  <div class="defaults-note">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" stroke-width="1.5" stroke-linecap="round"><path d="M12 8v.01M12 11v5"/><circle cx="12" cy="12" r="9"/></svg>
+    <span>Ya puestos: <b>San Cristóbal</b> · <b>Identified</b> · último contacto <b>hoy</b> · próximo seguimiento <b>+3 días</b>. Ábrelo abajo para cambiar.</span>
+  </div>
+  {% endif %}
+
+  <details class="more" {{ 'open' if mode=='edit' }}>
+    <summary><span style="font-family:var(--font-heading);font-size:16px">Más detalles</span><span class="tog">Abrir</span></summary>
+
+    <label for="owner_contact_name">Dueño / Contacto</label>
+    <input id="owner_contact_name" name="owner_contact_name" value="{{ c.owner_contact_name or '' }}">
+
+    <label for="address">Dirección</label>
+    <input id="address" name="address" value="{{ c.address or '' }}">
+
+    <div class="grid2">
+      <div>
+        <label for="province_city">Provincia/Ciudad</label>
+        <select id="province_city" name="province_city">
+          <option value="">—</option>
+          {% for p in PROVINCES %}<option value="{{ p }}" {{ 'selected' if c.province_city==p }}>{{ p }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="current_stage">Etapa</label>
+        <select id="current_stage" name="current_stage">
+          {% for s in STAGES %}<option value="{{ s }}" {{ 'selected' if c.current_stage==s }}>{{ s }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div>
+        <label for="has_website">¿Tiene web?</label>
+        <select id="has_website" name="has_website"><option value="">—</option>{% for v in YN %}<option value="{{ v }}" {{ 'selected' if c.has_website==v }}>{{ v }}</option>{% endfor %}</select>
+      </div>
+      <div>
+        <label for="has_social_only">¿Solo redes?</label>
+        <select id="has_social_only" name="has_social_only"><option value="">—</option>{% for v in YN %}<option value="{{ v }}" {{ 'selected' if c.has_social_only==v }}>{{ v }}</option>{% endfor %}</select>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div>
+        <label for="estimated_size">Tamaño</label>
+        <select id="estimated_size" name="estimated_size"><option value="">—</option>{% for s in SIZES %}<option value="{{ s }}" {{ 'selected' if c.estimated_size==s }}>{{ s }}</option>{% endfor %}</select>
+      </div>
+      <div>
+        <label for="source">Fuente</label>
+        <select id="source" name="source"><option value="">—</option>{% for s in SOURCES %}<option value="{{ s }}" {{ 'selected' if c.source==s }}>{{ s }}</option>{% endfor %}</select>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div><label for="last_contact_date">Último contacto</label><input id="last_contact_date" name="last_contact_date" type="date" value="{{ c.last_contact_date or '' }}"></div>
+      <div><label for="next_follow_up_date">Próx. seguimiento</label><input id="next_follow_up_date" name="next_follow_up_date" type="date" value="{{ c.next_follow_up_date or '' }}"></div>
+    </div>
+
+    <label for="deal_value_dop">Valor del trato (RD$)</label>
+    <input id="deal_value_dop" name="deal_value_dop" type="number" inputmode="numeric" step="1" min="0"
+           value="{{ c.deal_value_dop|int if c.deal_value_dop is not none else '' }}">
+
+    <label for="outcome_reason">Razón (si Perdido)</label>
+    <input id="outcome_reason" name="outcome_reason" value="{{ c.outcome_reason or '' }}">
+
+    <label for="notes">Notas</label>
+    <textarea id="notes" name="notes">{{ c.notes or '' }}</textarea>
+  </details>
+
+  {% if mode == 'new' %}
+  <div class="btn-stack">
+    <button type="submit" class="btn primary">Guardar empresa</button>
+    <button type="submit" name="and_another" value="1" class="btn">Guardar y añadir otra</button>
+  </div>
+  {% else %}
+  <div class="actions">
+    <a class="btn" href="{{ url_for('company_detail', company_id=c.id) }}">Cancelar</a>
+    <button type="submit" class="btn primary">Guardar cambios</button>
+  </div>
+  {% endif %}
+</form>
+
+{% endblock %}

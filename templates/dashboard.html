@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Panel — Outreach · CRM{% endblock %}
+{% block content %}
+
+{% set overdue = m.follow['OVERDUE'] %}
+{% set due = m.follow['DUE TODAY'] %}
+{% set upcoming = m.follow['Upcoming'] %}
+
+<div class="page-head">
+  <h1 class="page">Panel</h1>
+  <span class="lbl">{{ today_label }}</span>
+</div>
+
+{# Most prominent: overdue follow-ups #}
+{% if overdue or due %}
+<a class="attention" href="{{ url_for('companies', sort='next_follow_up') }}">
+  <div class="att-top">
+    <div class="att-n num">{{ overdue }}</div>
+    <div class="att-lead">
+      <div class="t">seguimientos vencidos</div>
+      <div class="s">Llama hoy o se enfrían.</div>
+    </div>
+  </div>
+  <div class="att-foot">
+    <div class="seg1"><span class="num c-amber" style="font-size:17px">{{ due }}</span> <span class="lbl">para hoy</span></div>
+    <div class="seg2"><span class="num c-green" style="font-size:17px">{{ upcoming }}</span> <span class="lbl">próximos</span></div>
+    <span class="go">Ver →</span>
+  </div>
+</a>
+{% else %}
+<a class="attention calm" href="{{ url_for('companies', sort='next_follow_up') }}">
+  <div class="att-top">
+    <div class="att-n num">✓</div>
+    <div class="att-lead">
+      <div class="t">Todo al día</div>
+      <div class="s">Sin seguimientos vencidos.</div>
+    </div>
+  </div>
+  <div class="att-foot">
+    <div class="seg1"><span class="num c-amber" style="font-size:17px">{{ due }}</span> <span class="lbl">para hoy</span></div>
+    <div class="seg2"><span class="num c-green" style="font-size:17px">{{ upcoming }}</span> <span class="lbl">próximos</span></div>
+    <span class="go">Ver →</span>
+  </div>
+</a>
+{% endif %}
+
+{# Stat figures #}
+<div class="figs">
+  <div class="fig"><div class="num n">{{ m.total }}</div><div class="lbl">Empresas</div></div>
+  <div class="fig"><div class="num n c-green">{{ m.won_count }}</div><div class="lbl">Ganados</div></div>
+  <div class="fig"><div class="num n c-red">{{ m.lost_count }}</div><div class="lbl">Perd{% if m.lost_rate is not none %} · {{ m.lost_rate|pct }}{% endif %}</div></div>
+  <div class="fig"><div class="num n c-amber">{{ due }}</div><div class="lbl">Para hoy</div></div>
+</div>
+
+{# Funnel — outline = reached this stage or further, fill = at it now #}
+{% set maxcum = m.funnel[0].cumulative or 1 %}
+<div class="page-head" style="margin-top:24px">
+  <h3 class="sec">Embudo</h3>
+  <span class="lbl">ahora · alcanzaron+ · conv</span>
+</div>
+<div class="funnel">
+  {% for f in m.funnel %}
+  <div class="{{ 'won' if f.stage=='Won' }}">
+    <div class="f-top">
+      <span {% if f.stage=='Won' %}style="color:var(--st-green)"{% endif %}>{{ f.stage }}</span>
+      <span class="nums"><b {% if f.stage=='Won' %}style="color:var(--st-green)"{% endif %}>{{ f.current }}</b> · {{ f.cumulative }}</span>
+    </div>
+    <div class="f-bar-row">
+      <div class="f-track">
+        <div class="f-outline" style="width: {{ (f.cumulative / maxcum * 100) | round(0, 'floor') }}%">
+          <div class="f-fill" style="width: {{ (f.current / f.cumulative * 100) | round(0, 'floor') if f.cumulative else 0 }}%"></div>
+        </div>
+      </div>
+      <div class="f-conv">{% if f.conversion is not none %}{{ f.conversion|pct }}{% else %}—{% endif %}</div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+<p class="foot-note">Ancho = alcanzaron esta etapa o más. Relleno = están ahí ahora. Excluye Perdidos.</p>
+
+<hr class="hr">
+<h3 class="sec">Valor ganado</h3>
+<div class="pair">
+  <div><div class="num n c-green">{{ m.won_total|dop }}</div><div class="lbl" style="margin-top:4px">Total</div></div>
+  <div><div class="num n">{{ m.won_avg|dop if m.won_avg is not none else '—' }}</div><div class="lbl" style="margin-top:4px">Promedio</div></div>
+</div>
+
+<hr class="hr">
+<div class="page-head"><h3 class="sec">Provincia</h3><span class="lbl">toca para filtrar</span></div>
+<div class="counts">
+  {% for p, n in m.by_province.items() %}
+  <a class="c-row {{ 'zero' if not n }}" href="{{ url_for('companies', province=p) }}"><span>{{ p }}</span><span class="num">{{ n }}</span></a>
+  {% endfor %}
+</div>
+
+<hr class="hr">
+<h3 class="sec">Sector</h3>
+<div class="counts">
+  {% for s, n in m.by_sector.items() %}
+  <a class="c-row {{ 'zero' if not n }}" href="{{ url_for('companies', sector=s) }}"><span>{{ s }}</span><span class="num">{{ n }}</span></a>
+  {% endfor %}
+</div>
+
+{% endblock %}

@@ -1,0 +1,109 @@
+{# Shared company detail + daily pipeline action. Used by the standalone mobile
+   detail page and the desktop split-view right pane.
+   Expects: c (company dict), next_url (where forms redirect back to). #}
+{% from "_badge.html" import follow_badge, stage_badge %}
+
+<div class="detail">
+  <div class="lbl eyebrow">{{ c.sector or '—' }} · {{ c.province_city or '—' }}</div>
+  <h1 class="dname">{{ c.company_name }}</h1>
+  <div class="dbadges">
+    {{ stage_badge(c.current_stage) }}
+    {{ follow_badge(c.follow_up_status) }}
+    {% if c.next_follow_up_date %}<span class="pill p-muted">{{ c.next_follow_up_date }}</span>{% endif %}
+  </div>
+
+  {% if c.phone %}
+  <div class="contact-row">
+    <a class="btn-wa" href="{{ c.phone|wa }}" target="_blank" rel="noopener">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--st-green)" stroke-width="1.5" stroke-linecap="round"><path d="M21 11.5a8.4 8.4 0 0 1-12.3 7.4L3 21l2.2-5.5A8.4 8.4 0 1 1 21 11.5z"/></svg>
+      <span>WhatsApp {{ c.phone }}</span>
+    </a>
+    <a class="btn-call" href="tel:{{ c.phone }}" aria-label="Llamar">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6.5 3h3l1.5 4-2 1.5a12 12 0 0 0 6 6L16.5 12l4 1.5v3a2 2 0 0 1-2.2 2A16.5 16.5 0 0 1 4 6.2 2 2 0 0 1 6 4z"/></svg>
+    </a>
+  </div>
+  {% endif %}
+
+  <hr class="hr">
+  <div class="lbl" style="color:var(--color-accent)">Acción del día</div>
+  <h3 class="sec" style="margin-top:7px">Mover en el pipeline</h3>
+
+  <form method="post" action="{{ url_for('company_advance', company_id=c.id) }}">
+    <input type="hidden" name="next" value="{{ next_url }}">
+
+    <label for="adv_stage_{{ c.id }}">Etapa</label>
+    <select id="adv_stage_{{ c.id }}" name="current_stage" data-stagesel onchange="toggleReveal(this)">
+      {% for s in STAGES %}<option value="{{ s }}" {{ 'selected' if c.current_stage==s }}>{{ s }}</option>{% endfor %}
+    </select>
+
+    <div class="reveal won" data-reveal="won" style="display:none">
+      <div class="lbl" style="color:var(--st-green)">Aparece al elegir Won</div>
+      <label>Valor del trato (RD$)</label>
+      <input name="deal_value_dop" type="number" inputmode="numeric" step="1" min="0"
+             value="{{ c.deal_value_dop|int if c.deal_value_dop is not none else '' }}" placeholder="75000">
+    </div>
+    <div class="reveal lost" data-reveal="lost" style="display:none">
+      <div class="lbl" style="color:var(--st-red)">Aparece al elegir Lost</div>
+      <label>Razón de pérdida</label>
+      <input name="outcome_reason" value="{{ c.outcome_reason or '' }}" placeholder="ya tenía web…">
+    </div>
+
+    <div class="grid2">
+      <div><label>Último contacto</label><input name="last_contact_date" type="date" value="{{ today_iso }}"></div>
+      <div><label>Próx. seguimiento</label><input data-nextdate name="next_follow_up_date" type="date" value="{{ c.next_follow_up_date or '' }}"></div>
+    </div>
+    <div class="date-quick">
+      <span class="pill p-accent" data-days="3">+3d</span>
+      <span class="pill" data-days="7">+1 sem</span>
+      <span class="pill" data-days="14">+2 sem</span>
+      <span class="pill" data-days="clear">sin fecha</span>
+    </div>
+
+    <label>Nota (se fecha sola)</label>
+    <textarea name="note_add" placeholder="Aceptó los 75k, quiere pagar 50/50…"></textarea>
+
+    <button type="submit" class="btn primary" style="margin-top:14px">Guardar avance</button>
+  </form>
+
+  <hr class="hr">
+  <div class="page-head">
+    <h3 class="sec">Ficha completa</h3>
+    <a class="lbl" style="color:var(--color-accent)" href="{{ url_for('company_edit', company_id=c.id) }}">Editar</a>
+  </div>
+  <div class="kv">
+    <div class="kv-row"><span class="k">Dueño</span><span class="v">{{ c.owner_contact_name or '—' }}</span></div>
+    <div class="kv-row"><span class="k">Dirección</span><span class="v">{{ c.address or '—' }}</span></div>
+    <div class="kv-row"><span class="k">¿Tiene web?</span><span class="v">{{ c.has_website or '—' }}</span></div>
+    <div class="kv-row"><span class="k">¿Solo redes?</span><span class="v">{{ c.has_social_only or '—' }}</span></div>
+    <div class="kv-row"><span class="k">Tamaño</span><span class="v">{{ c.estimated_size or '—' }}</span></div>
+    <div class="kv-row"><span class="k">Fuente</span><span class="v">{{ c.source or '—' }}</span></div>
+    <div class="kv-row"><span class="k">Valor del trato</span><span class="v num">{{ c.deal_value_dop|dop }}</span></div>
+    {% if c.current_stage == 'Lost' %}<div class="kv-row"><span class="k">Razón pérdida</span><span class="v">{{ c.outcome_reason or '—' }}</span></div>{% endif %}
+    <div class="kv-row"><span class="k">Creado · actualizado</span><span class="v num" style="font-size:12px">{{ c.created_at[:10] }} · {{ c.updated_at[:10] }}</span></div>
+  </div>
+
+  {% if c.notes %}
+  <hr class="hr">
+  <h3 class="sec">Notas</h3>
+  <div class="notes-tl">
+    <div><p class="n-body">{{ c.notes }}</p></div>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+  function toggleReveal(sel) {
+    var scope = sel.closest('form');
+    scope.querySelector('[data-reveal="won"]').style.display  = (sel.value === 'Won')  ? 'block' : 'none';
+    scope.querySelector('[data-reveal="lost"]').style.display = (sel.value === 'Lost') ? 'block' : 'none';
+  }
+  document.querySelectorAll('[data-stagesel]').forEach(function (s) { toggleReveal(s); });
+  document.querySelectorAll('.date-quick .pill[data-days]').forEach(function (p) {
+    p.addEventListener('click', function () {
+      var input = p.closest('form').querySelector('[data-nextdate]');
+      if (p.dataset.days === 'clear') { input.value = ''; return; }
+      var d = new Date(); d.setDate(d.getDate() + parseInt(p.dataset.days, 10));
+      input.value = d.toISOString().slice(0, 10);
+    });
+  });
+</script>

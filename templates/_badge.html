@@ -1,0 +1,13 @@
+{# Status pill macros — Classical Nocturne. Meanings preserved, labels in Spanish. #}
+{% macro follow_badge(status) %}
+  {% if status == 'OVERDUE' %}<span class="pill p-red">Vencido</span>
+  {% elif status == 'DUE TODAY' %}<span class="pill p-amber">Hoy</span>
+  {% elif status == 'Upcoming' %}<span class="pill p-green">Próximo</span>
+  {% else %}<span class="pill p-muted">Sin fecha</span>{% endif %}
+{% endmacro %}
+
+{% macro stage_badge(stage) %}
+  {% if stage == 'Won' %}<span class="pill p-green">Won</span>
+  {% elif stage == 'Lost' %}<span class="pill p-red">Lost</span>
+  {% else %}<span class="pill p-accent">{{ stage }}</span>{% endif %}
+{% endmacro %}

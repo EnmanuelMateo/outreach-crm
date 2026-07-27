@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% from "_badge.html" import follow_badge, stage_badge %}
+{% block title %}Empresas — Outreach · CRM{% endblock %}
+{% block wrapclass %}wrap-wide{% endblock %}
+{% block content %}
+
+<div class="workspace {{ 'split' if selected }}">
+  <div class="ws-list">
+    <div class="page-head"><h1 class="page">Empresas</h1></div>
+
+    <form method="get" action="{{ url_for('companies') }}" class="filters-card" style="margin-top:14px">
+      {% if selected %}<input type="hidden" name="open" value="{{ selected.id }}">{% endif %}
+      <div class="search-box">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink-3)" stroke-width="1.5" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M16.5 16.5 21 21"/></svg>
+        <input type="search" name="search" placeholder="Buscar por nombre…" value="{{ f.search }}">
+      </div>
+      <div class="filter-grid">
+        <select name="province" onchange="this.form.submit()">
+          <option value="">Toda provincia</option>
+          {% for p in PROVINCES %}<option value="{{ p }}" {{ 'selected' if f.province==p }}>{{ p }}</option>{% endfor %}
+        </select>
+        <select name="sector" onchange="this.form.submit()">
+          <option value="">Todo sector</option>
+          {% for s in SECTORS %}<option value="{{ s }}" {{ 'selected' if f.sector==s }}>{{ s }}</option>{% endfor %}
+        </select>
+        <select name="stage" onchange="this.form.submit()">
+          <option value="">Toda etapa</option>
+          {% for s in STAGES %}<option value="{{ s }}" {{ 'selected' if f.stage==s }}>{{ s }}</option>{% endfor %}
+        </select>
+        <select name="sort" onchange="this.form.submit()">
+          <option value="updated_at" {{ 'selected' if f.sort=='updated_at' }}>Actualizado</option>
+          <option value="name" {{ 'selected' if f.sort=='name' }}>Nombre A-Z</option>
+          <option value="next_follow_up" {{ 'selected' if f.sort=='next_follow_up' }}>Próx. seguim.</option>
+          <option value="stage" {{ 'selected' if f.sort=='stage' }}>Etapa</option>
+        </select>
+      </div>
+    </form>
+
+    <div class="list-toolbar">
+      <span class="cnt"><b class="num">{{ rows|length }}</b> empresa{{ '' if rows|length == 1 else 's' }}</span>
+      <span class="acts">
+        {% if f.province or f.sector or f.stage or f.search %}<a class="plain" href="{{ url_for('companies') }}">Limpiar</a>{% endif %}
+        <a href="{{ url_for('companies_csv', province=f.province, sector=f.sector, stage=f.stage, search=f.search, sort=f.sort) }}">↓ CSV</a>
+      </span>
+    </div>
+
+    {% if rows %}
+    {# Mobile: card rows #}
+    <div class="clist">
+      {% for r in rows %}
+      <a class="crow {{ 'sel' if selected and selected.id==r.id }}" data-open="{{ r.id }}" href="{{ url_for('company_detail', company_id=r.id) }}">
+        <div class="crow-top">
+          <span class="cname">{{ r.company_name }}</span>
+          <svg class="chev" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg>
+        </div>
+        <div class="cmeta">{{ r.sector or '—' }} · {{ r.province_city or '—' }}{% if r.phone %} · {{ r.phone }}{% endif %}</div>
+        <div class="cbadges">
+          {{ stage_badge(r.current_stage) }}
+          {% if r.current_stage == 'Won' and r.deal_value_dop is not none %}
+            <span class="num" style="font-size:11px;color:var(--st-green)">{{ r.deal_value_dop|dop }}</span>
+          {% else %}
+            {{ follow_badge(r.follow_up_status) }}
+            {% if r.next_follow_up_date %}<span class="num" style="font-size:11px;color:var(--ink-3)">{{ r.next_follow_up_date }}</span>{% endif %}
+          {% endif %}
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+
+    {# Desktop: table #}
+    <table class="table only-desktop" style="margin-top:16px">
+      <thead><tr><th>Empresa</th><th>Sector</th><th>Etapa</th><th>Seguimiento</th><th class="right">Valor</th></tr></thead>
+      <tbody>
+        {% for r in rows %}
+        <tr class="{{ 'sel' if selected and selected.id==r.id }}" data-open="{{ r.id }}" data-href="{{ url_for('company_detail', company_id=r.id) }}">
+          <td><b style="font-weight:600">{{ r.company_name }}</b>{% if r.phone %}<div class="sub">{{ r.phone }}</div>{% endif %}</td>
+          <td class="muted">{{ r.sector or '—' }}</td>
+          <td>{{ stage_badge(r.current_stage) }}</td>
+          <td>{% if r.current_stage in ['Won','Lost'] %}<span style="color:var(--ink-4)">—</span>{% else %}{{ follow_badge(r.follow_up_status) }}{% endif %}</td>
+          <td class="right num" style="{{ 'color:var(--st-green)' if r.current_stage=='Won' else 'color:var(--ink-4)' }}">{{ (r.deal_value_dop|dop) if r.deal_value_dop is not none else '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty">Sin empresas que coincidan.<br>Toca <b>+</b> para añadir una.</div>
+    {% endif %}
+  </div>
+
+  {% if selected %}
+  <aside class="ws-panel">
+    {% with c = selected, next_url = url_for('companies', open=selected.id, province=f.province, sector=f.sector, stage=f.stage, search=f.search, sort=f.sort) %}
+      {% include "_detail_panel.html" %}
+    {% endwith %}
+  </aside>
+  {% endif %}
+</div>
+
+<script>
+  (function () {
+    var desktop = window.matchMedia('(min-width:940px)').matches;
+    function openUrl(id) { var u = new URL(window.location.href); u.searchParams.set('open', id); return u.pathname + u.search; }
+    document.querySelectorAll('[data-open]').forEach(function (el) {
+      el.addEventListener('click', function (e) {
+        var id = el.getAttribute('data-open');
+        if (desktop) { e.preventDefault(); window.location.href = openUrl(id); }
+        else if (el.dataset.href) { window.location.href = el.dataset.href; }
+      });
+    });
+  })();
+</script>
+
+{% endblock %}

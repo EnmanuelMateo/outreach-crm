@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}{{ c.company_name }} — Outreach · CRM{% endblock %}
+{% block content %}
+
+<p style="margin:0 0 14px"><a href="{{ url_for('companies') }}">← Empresas</a></p>
+
+{% set next_url = url_for('company_detail', company_id=c.id) %}
+{% include "_detail_panel.html" with context %}
+
+{% endblock %}
