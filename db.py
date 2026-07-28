@@ -29,8 +29,18 @@ def _engine_url():
     return "sqlite:///" + os.path.join(BASE_DIR, "crm.db")
 
 
-engine = create_engine(_engine_url(), pool_pre_ping=True, future=True)
-IS_SQLITE = engine.url.get_backend_name() == "sqlite"
+_URL = _engine_url()
+IS_SQLITE = _URL.startswith("sqlite")
+
+_engine_kwargs = {"pool_pre_ping": True, "future": True}
+if not IS_SQLITE:
+    # Managed Postgres behind a pooler (e.g. Supabase Supavisor). Disabling
+    # psycopg's auto-prepared-statements makes both session- and transaction-mode
+    # pooling safe; recycle idle connections the pooler may drop.
+    _engine_kwargs["pool_recycle"] = 300
+    _engine_kwargs["connect_args"] = {"prepare_threshold": None}
+
+engine = create_engine(_URL, **_engine_kwargs)
 
 metadata = MetaData()
 
