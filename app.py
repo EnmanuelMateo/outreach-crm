@@ -12,7 +12,7 @@ from flask import (Flask, Response, redirect, render_template, request, url_for)
 
 import db
 from domain import (SECTORS, PROVINCES, SIZES, SOURCES, YN, STAGES, FUNNEL_STAGES,
-                    DEFAULT_PROVINCE, DEFAULT_STAGE, CURRENCY_LABEL)
+                    DEFAULT_PROVINCE, DEFAULT_STAGE, CURRENCY_LABEL, _parse_date)
 
 app = Flask(__name__)
 db.init_db()
@@ -115,6 +115,58 @@ def parse_company_form(form):
         "outcome_reason": _clean(form.get("outcome_reason")),
     }
     return data
+
+
+# Writable columns used for the CSV import template (order = template header).
+# Matches the export so an exported file re-imports cleanly (extra columns like
+# id / follow_up_status / created_at / updated_at are simply ignored).
+IMPORT_COLUMNS = [
+    "company_name", "sector", "province_city", "address", "owner_contact_name",
+    "phone", "has_website", "has_social_only", "estimated_size", "source",
+    "current_stage", "last_contact_date", "next_follow_up_date", "deal_value_dop",
+    "outcome_reason", "notes",
+]
+
+
+def _norm_date(value):
+    """Normalize a CSV date cell to ISO 'YYYY-MM-DD', or None if unparseable."""
+    d = _parse_date(value)
+    return d.isoformat() if d else None
+
+
+def parse_csv_row(row):
+    """Map one CSV row (dict keyed by header) to a validated company dict.
+    Unknown enum values become None; company_name is left None if missing so the
+    caller can skip the row. Reuses the same validators as the Add form."""
+    def g(key):
+        return _clean(row.get(key))
+
+    deal_raw = g("deal_value_dop")
+    deal_value = None
+    if deal_raw is not None:
+        try:
+            deal_value = float(deal_raw.replace(",", "").replace(CURRENCY_LABEL, "").strip())
+        except ValueError:
+            deal_value = None
+
+    return {
+        "company_name": g("company_name"),
+        "sector": _validate_enum(g("sector"), SECTORS),
+        "province_city": _validate_enum(g("province_city"), PROVINCES),
+        "address": g("address"),
+        "owner_contact_name": g("owner_contact_name"),
+        "phone": g("phone"),
+        "has_website": _validate_enum(g("has_website"), YN),
+        "has_social_only": _validate_enum(g("has_social_only"), YN),
+        "estimated_size": _validate_enum(g("estimated_size"), SIZES),
+        "source": _validate_enum(g("source"), SOURCES),
+        "current_stage": _validate_enum(g("current_stage"), STAGES) or DEFAULT_STAGE,
+        "last_contact_date": _norm_date(g("last_contact_date")),
+        "next_follow_up_date": _norm_date(g("next_follow_up_date")),
+        "notes": g("notes"),
+        "deal_value_dop": deal_value,
+        "outcome_reason": g("outcome_reason"),
+    }
 
 
 # --- Routes ----------------------------------------------------------------
@@ -269,6 +321,75 @@ def companies_csv():
     return Response(
         payload, mimetype="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+@app.route("/companies/template.csv")
+def companies_template_csv():
+    """Blank import template: the writable headers + one example row."""
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=IMPORT_COLUMNS, extrasaction="ignore")
+    writer.writeheader()
+    writer.writerow({
+        "company_name": "Ferretería El Progreso", "sector": "Ferretería",
+        "province_city": "San Cristóbal", "address": "Av. Constitución 42",
+        "owner_contact_name": "Juan Pérez", "phone": "809-555-0142",
+        "has_website": "N", "has_social_only": "Y", "estimated_size": "Small",
+        "source": "Drive-by", "current_stage": "Identified",
+        "last_contact_date": "", "next_follow_up_date": "2026-08-15",
+        "deal_value_dop": "", "outcome_reason": "",
+        "notes": "Ejemplo — borra esta fila antes de importar.",
+    })
+    payload = "﻿" + buf.getvalue()
+    return Response(
+        payload, mimetype="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="plantilla_empresas.csv"'})
+
+
+@app.route("/companies/import", methods=["GET", "POST"])
+def company_import():
+    if request.method == "GET":
+        return render_template("company_import.html", active="companies",
+                               result=None, error=None)
+
+    file = request.files.get("file")
+    if not file or not file.filename:
+        return render_template("company_import.html", active="companies",
+                               result=None, error="Elige un archivo CSV primero.")
+    try:
+        text = file.read().decode("utf-8-sig")  # utf-8-sig strips the Excel BOM
+    except UnicodeDecodeError:
+        text = file.read().decode("latin-1", errors="replace")
+
+    reader = csv.DictReader(io.StringIO(text))
+    if not reader.fieldnames or "company_name" not in reader.fieldnames:
+        return render_template(
+            "company_import.html", active="companies", result=None,
+            error="El CSV no tiene una columna 'company_name'. Descarga la plantilla.")
+
+    inserted, skipped_dup, errors = 0, 0, []
+    with db.engine.begin() as conn:
+        # Existing names (lower-cased) so re-importing the same file is a no-op.
+        existing = {
+            (r["company_name"] or "").strip().lower()
+            for r in conn.execute(db.select(db.companies.c.company_name)).mappings()
+        }
+        for i, row in enumerate(reader, start=2):  # row 1 is the header
+            data = parse_csv_row(row)
+            name = data["company_name"]
+            if not name:
+                errors.append(f"Fila {i}: sin nombre de empresa — omitida.")
+                continue
+            key = name.strip().lower()
+            if key in existing:
+                skipped_dup += 1
+                continue
+            db.insert_company(conn, data)
+            existing.add(key)
+            inserted += 1
+
+    result = {"inserted": inserted, "skipped_dup": skipped_dup, "errors": errors}
+    return render_template("company_import.html", active="companies",
+                           result=result, error=None)
 
 
 if __name__ == "__main__":

@@ -40,6 +40,7 @@
       <span class="cnt"><b class="num">{{ rows|length }}</b> empresa{{ '' if rows|length == 1 else 's' }}</span>
       <span class="acts">
         {% if f.province or f.sector or f.stage or f.search %}<a class="plain" href="{{ url_for('companies') }}">Limpiar</a>{% endif %}
+        <a href="{{ url_for('company_import') }}">↑ Importar</a>
         <a href="{{ url_for('companies_csv', province=f.province, sector=f.sector, stage=f.stage, search=f.search, sort=f.sort) }}">↓ CSV</a>
       </span>
     </div>

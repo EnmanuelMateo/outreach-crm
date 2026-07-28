@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Importar CSV — Outreach · CRM{% endblock %}
+{% block content %}
+
+<p style="margin:0 0 14px"><a href="{{ url_for('companies') }}">← Empresas</a></p>
+
+<div class="lbl" style="color:var(--color-accent)">Carga por lote</div>
+<h1 class="page" style="margin:7px 0 4px">Importar empresas</h1>
+<p style="font:400 12.5px/1.5 var(--font-body);color:var(--ink-3);margin:0 0 20px">
+  Sube un CSV con las mismas columnas que la exportación. Cada fila es una empresa.
+</p>
+
+{% if error %}
+<div class="attention" style="margin-top:0">
+  <div class="att-lead"><div class="t" style="color:var(--st-red)">No se pudo importar</div>
+  <div class="s">{{ error }}</div></div>
+</div>
+{% endif %}
+
+{% if result %}
+<div class="attention calm" style="margin-top:0">
+  <div class="att-top">
+    <div class="att-n num" style="color:var(--st-green)">{{ result.inserted }}</div>
+    <div class="att-lead">
+      <div class="t">empresas importadas</div>
+      <div class="s">
+        {% if result.skipped_dup %}{{ result.skipped_dup }} omitidas (ya existían por nombre).{% else %}Sin duplicados.{% endif %}
+      </div>
+    </div>
+  </div>
+  {% if result.errors %}
+  <div class="att-foot" style="display:block">
+    <div class="lbl" style="color:var(--st-amber)">{{ result.errors|length }} fila(s) con problemas</div>
+    <ul style="margin:8px 0 0;padding-left:18px;font:400 12px/1.6 var(--font-body);color:var(--ink-2)">
+      {% for e in result.errors[:15] %}<li>{{ e }}</li>{% endfor %}
+      {% if result.errors|length > 15 %}<li>… y {{ result.errors|length - 15 }} más.</li>{% endif %}
+    </ul>
+  </div>
+  {% endif %}
+  <div style="margin-top:14px"><a class="btn primary" href="{{ url_for('companies') }}">Ver empresas</a></div>
+</div>
+{% endif %}
+
+<div style="border:1px solid var(--color-divider);border-radius:var(--radius-md);padding:16px;margin-top:16px">
+  <div class="lbl">Paso 1 — plantilla</div>
+  <p style="font:400 13px/1.55 var(--font-body);color:var(--ink-2);margin:8px 0 12px">
+    Descarga la plantilla, rellénala en Excel (una fila por empresa) y guárdala como CSV.
+    Solo <b style="font-weight:600">company_name</b> es obligatorio.
+  </p>
+  <a class="btn" style="width:auto;display:inline-flex" href="{{ url_for('companies_template_csv') }}">↓ Descargar plantilla</a>
+</div>
+
+<form method="post" enctype="multipart/form-data"
+      style="border:1px solid var(--color-divider);border-radius:var(--radius-md);padding:16px;margin-top:12px">
+  <div class="lbl">Paso 2 — subir</div>
+  <label for="file">Archivo CSV</label>
+  <input id="file" name="file" type="file" accept=".csv,text/csv" required
+         style="padding:11px 12px">
+  <button type="submit" class="btn primary" style="margin-top:16px">Importar</button>
+  <p class="hint" style="margin-top:10px">
+    Las filas cuyo nombre ya exista se omiten (para que reimportar sea seguro).
+    Valores de lista inválidos se dejan vacíos; el resto de la fila se importa igual.
+  </p>
+</form>
+
+<details class="more" style="margin-top:18px">
+  <summary><span style="font-family:var(--font-heading);font-size:16px">Valores válidos de las columnas de lista</span><span class="tog">Abrir</span></summary>
+  <div class="kv" style="margin-top:10px">
+    <div class="kv-row"><span class="k">sector</span><span class="v">{{ SECTORS|join(' · ') }}</span></div>
+    <div class="kv-row"><span class="k">province_city</span><span class="v">{{ PROVINCES|join(' · ') }}</span></div>
+    <div class="kv-row"><span class="k">estimated_size</span><span class="v">{{ SIZES|join(' · ') }}</span></div>
+    <div class="kv-row"><span class="k">source</span><span class="v">{{ SOURCES|join(' · ') }}</span></div>
+    <div class="kv-row"><span class="k">current_stage</span><span class="v">{{ STAGES|join(' · ') }}</span></div>
+    <div class="kv-row"><span class="k">has_website · has_social_only</span><span class="v">Y · N</span></div>
+    <div class="kv-row"><span class="k">fechas</span><span class="v">YYYY-MM-DD</span></div>
+    <div class="kv-row"><span class="k">deal_value_dop</span><span class="v">número (pesos, sin RD$)</span></div>
+  </div>
+</details>
+
+{% endblock %}
