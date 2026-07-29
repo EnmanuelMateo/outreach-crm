@@ -12,7 +12,8 @@ from flask import (Flask, Response, redirect, render_template, request, url_for)
 
 import db
 from domain import (SECTORS, PROVINCES, SIZES, SOURCES, YN, STAGES, FUNNEL_STAGES,
-                    DEFAULT_PROVINCE, DEFAULT_STAGE, CURRENCY_LABEL, _parse_date)
+                    DEFAULT_PROVINCE, DEFAULT_STAGE, CURRENCY_LABEL, _parse_date,
+                    today as dr_today)
 
 app = Flask(__name__)
 db.init_db()
@@ -27,10 +28,11 @@ _ES_MONTHS = ["", "ene", "feb", "mar", "abr", "may", "jun",
 
 @app.context_processor
 def inject_globals():
-    t = date.today()
+    t = dr_today()
     return {
-        "SECTORS": SECTORS, "PROVINCES": PROVINCES, "SIZES": SIZES,
-        "SOURCES": SOURCES, "YN": YN, "STAGES": STAGES,
+        # SECTORS / PROVINCES come from the user-editable option lists (live).
+        "SECTORS": db.options_of("sector"), "PROVINCES": db.options_of("province"),
+        "SIZES": SIZES, "SOURCES": SOURCES, "YN": YN, "STAGES": STAGES,
         "FUNNEL_STAGES": FUNNEL_STAGES, "CURRENCY": CURRENCY_LABEL,
         "today_iso": t.isoformat(),
         "today_label": f"{_ES_DAYS[t.weekday()]} {t.day} {_ES_MONTHS[t.month]}",
@@ -84,8 +86,13 @@ def _validate_enum(value, allowed):
     return value if value in allowed else None
 
 
-def parse_company_form(form):
+def parse_company_form(form, sectors=None, provinces=None):
     """Turn submitted form fields into a validated column dict."""
+    if sectors is None:
+        sectors = db.options_of("sector")
+    if provinces is None:
+        provinces = db.options_of("province")
+
     deal_raw = _clean(form.get("deal_value_dop"))
     deal_value = None
     if deal_raw is not None:
@@ -98,8 +105,8 @@ def parse_company_form(form):
 
     data = {
         "company_name": _clean(form.get("company_name")) or "(sin nombre)",
-        "sector": _validate_enum(_clean(form.get("sector")), SECTORS),
-        "province_city": _validate_enum(_clean(form.get("province_city")), PROVINCES),
+        "sector": _validate_enum(_clean(form.get("sector")), sectors),
+        "province_city": _validate_enum(_clean(form.get("province_city")), provinces),
         "address": _clean(form.get("address")),
         "owner_contact_name": _clean(form.get("owner_contact_name")),
         "phone": _clean(form.get("phone")),
@@ -134,10 +141,12 @@ def _norm_date(value):
     return d.isoformat() if d else None
 
 
-def parse_csv_row(row):
+def parse_csv_row(row, sectors, provinces):
     """Map one CSV row (dict keyed by header) to a validated company dict.
     Unknown enum values become None; company_name is left None if missing so the
-    caller can skip the row. Reuses the same validators as the Add form."""
+    caller can skip the row. Reuses the same validators as the Add form.
+    `sectors`/`provinces` are the live option lists, passed in once by the caller
+    so a large import doesn't re-query per row."""
     def g(key):
         return _clean(row.get(key))
 
@@ -151,8 +160,8 @@ def parse_csv_row(row):
 
     return {
         "company_name": g("company_name"),
-        "sector": _validate_enum(g("sector"), SECTORS),
-        "province_city": _validate_enum(g("province_city"), PROVINCES),
+        "sector": _validate_enum(g("sector"), sectors),
+        "province_city": _validate_enum(g("province_city"), provinces),
         "address": g("address"),
         "owner_contact_name": g("owner_contact_name"),
         "phone": g("phone"),
@@ -215,8 +224,8 @@ def company_new():
         "current_stage": DEFAULT_STAGE,
         "province_city": DEFAULT_PROVINCE,
         "has_website": "N",
-        "last_contact_date": date.today().isoformat(),
-        "next_follow_up_date": (date.today() + timedelta(days=3)).isoformat(),
+        "last_contact_date": dr_today().isoformat(),
+        "next_follow_up_date": (dr_today() + timedelta(days=3)).isoformat(),
     })
     return render_template("company_form.html", c=default, mode="new", active="new")
 
@@ -280,7 +289,7 @@ def company_advance(company_id):
 
         note_add = _clean(request.form.get("note_add"))
         if note_add:
-            stamp = date.today().isoformat()
+            stamp = dr_today().isoformat()
             existing = company.get("notes") or ""
             company["notes"] = (f"{existing}\n[{stamp}] {note_add}").strip()
 
@@ -317,7 +326,7 @@ def companies_csv():
 
     # BOM so Excel opens the accented Spanish text correctly.
     payload = "﻿" + buf.getvalue()
-    filename = f"companies_{date.today().isoformat()}.csv"
+    filename = f"companies_{dr_today().isoformat()}.csv"
     return Response(
         payload, mimetype="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'})
@@ -368,13 +377,15 @@ def company_import():
 
     inserted, skipped_dup, errors = 0, 0, []
     with db.engine.begin() as conn:
+        sectors = db.get_options(conn, "sector")
+        provinces = db.get_options(conn, "province")
         # Existing names (lower-cased) so re-importing the same file is a no-op.
         existing = {
             (r["company_name"] or "").strip().lower()
             for r in conn.execute(db.select(db.companies.c.company_name)).mappings()
         }
         for i, row in enumerate(reader, start=2):  # row 1 is the header
-            data = parse_csv_row(row)
+            data = parse_csv_row(row, sectors, provinces)
             name = data["company_name"]
             if not name:
                 errors.append(f"Fila {i}: sin nombre de empresa — omitida.")
@@ -390,6 +401,30 @@ def company_import():
     result = {"inserted": inserted, "skipped_dup": skipped_dup, "errors": errors}
     return render_template("company_import.html", active="companies",
                            result=result, error=None)
+
+
+@app.route("/configuracion", methods=["GET", "POST"])
+def settings():
+    """Manage the editable Sector and Provincia dropdown lists."""
+    if request.method == "POST":
+        kind = request.form.get("kind")
+        action = request.form.get("action")
+        if kind in ("sector", "province"):
+            oid = request.form.get("option_id", type=int)
+            with db.engine.begin() as conn:
+                if action == "add":
+                    db.add_option(conn, kind, _clean(request.form.get("name")))
+                elif action == "rename" and oid:
+                    db.rename_option(conn, kind, oid, _clean(request.form.get("name")))
+                elif action == "remove" and oid:
+                    db.remove_option(conn, kind, oid)
+        return redirect(url_for("settings"))
+
+    with db.engine.connect() as conn:
+        sectors = db.list_option_rows(conn, "sector")
+        provinces = db.list_option_rows(conn, "province")
+    return render_template("settings.html", sectors=sectors, provinces=provinces,
+                           active="settings")
 
 
 if __name__ == "__main__":

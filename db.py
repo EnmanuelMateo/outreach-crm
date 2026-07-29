@@ -70,6 +70,20 @@ companies = Table(
     Column("updated_at", Text),
 )
 
+# User-editable dropdown lists (sectors, provinces). Company rows still store the
+# value as plain text; this table just drives the dropdowns and dashboard groups.
+options = Table(
+    "options", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("kind", Text, nullable=False, index=True),   # 'sector' | 'province'
+    Column("name", Text, nullable=False),
+    Column("position", Integer, nullable=False, default=0),
+    Column("active", Integer, nullable=False, default=1),
+)
+
+# Company column each option kind maps to (for rename cascades / grouping).
+OPTION_COLUMN = {"sector": "sector", "province": "province_city"}
+
 # Columns writable from forms / the seed (id and timestamps are managed here).
 COLUMNS = [
     "company_name", "sector", "province_city", "address", "owner_contact_name",
@@ -80,8 +94,79 @@ COLUMNS = [
 
 
 def init_db():
-    """Create the schema if it doesn't exist. Safe to run repeatedly."""
+    """Create the schema if it doesn't exist, and seed the option lists once."""
     metadata.create_all(engine)
+    from domain import SECTORS as _SEC, PROVINCES as _PROV
+    defaults = {"sector": _SEC, "province": _PROV}
+    with engine.begin() as conn:
+        for kind, names in defaults.items():
+            exists = conn.execute(
+                select(func.count()).select_from(options).where(options.c.kind == kind)
+            ).scalar_one()
+            if not exists:
+                conn.execute(insert(options), [
+                    {"kind": kind, "name": n, "position": i, "active": 1}
+                    for i, n in enumerate(names)
+                ])
+
+
+# --- Option-list helpers ---------------------------------------------------
+
+def get_options(conn, kind, active_only=True):
+    """Ordered list of option names for a kind (used to build dropdowns)."""
+    stmt = select(options.c.name).where(options.c.kind == kind)
+    if active_only:
+        stmt = stmt.where(options.c.active == 1)
+    stmt = stmt.order_by(options.c.position, options.c.id)
+    return list(conn.execute(stmt).scalars().all())
+
+
+def options_of(kind):
+    """Convenience: open a short-lived connection and return option names."""
+    with engine.connect() as conn:
+        return get_options(conn, kind)
+
+
+def list_option_rows(conn, kind):
+    """Active option rows (id + name) for the settings management page."""
+    stmt = (select(options.c.id, options.c.name)
+            .where(options.c.kind == kind, options.c.active == 1)
+            .order_by(options.c.position, options.c.id))
+    return [dict(r) for r in conn.execute(stmt).mappings().all()]
+
+
+def add_option(conn, kind, name):
+    if not name:
+        return
+    existing = get_options(conn, kind)
+    if name.lower() in {e.lower() for e in existing}:
+        return  # already present (case-insensitive)
+    max_pos = conn.execute(
+        select(func.coalesce(func.max(options.c.position), -1)).where(options.c.kind == kind)
+    ).scalar_one()
+    conn.execute(insert(options).values(
+        kind=kind, name=name, position=max_pos + 1, active=1))
+
+
+def rename_option(conn, kind, option_id, new_name):
+    if not new_name:
+        return
+    old = conn.execute(
+        select(options.c.name).where(options.c.id == option_id, options.c.kind == kind)
+    ).scalar_one_or_none()
+    if old is None or old == new_name:
+        if old is None:
+            return
+    conn.execute(update(options).where(options.c.id == option_id).values(name=new_name))
+    # Cascade to existing companies so the rename doesn't orphan their values.
+    col = OPTION_COLUMN[kind]
+    conn.execute(update(companies).where(companies.c[col] == old).values(**{col: new_name}))
+
+
+def remove_option(conn, kind, option_id):
+    """Soft-remove: hide from dropdowns; companies keep their text value."""
+    conn.execute(update(options).where(
+        options.c.id == option_id, options.c.kind == kind).values(active=0))
 
 
 def _now():
@@ -151,10 +236,11 @@ def count_companies(conn):
 def dashboard_metrics(conn, today=None):
     """Recompute every Dashboard number live, matching the spreadsheet logic."""
     if today is None:
-        today = date.today()
+        from domain import today as _dr_today
+        today = _dr_today()
     rows = [_enrich(r, today) for r in conn.execute(select(companies)).mappings().all()]
 
-    from domain import FUNNEL_STAGES, SECTORS, PROVINCES, stage_order as so
+    from domain import FUNNEL_STAGES, stage_order as so
 
     total = len(rows)
     lost = [r for r in rows if r["current_stage"] == "Lost"]
@@ -179,8 +265,16 @@ def dashboard_metrics(conn, today=None):
     if denom:
         lost_rate = len(lost) / denom
 
-    by_province = {p: sum(1 for r in rows if r["province_city"] == p) for p in PROVINCES}
-    by_sector = {s: sum(1 for r in rows if r["sector"] == s) for s in SECTORS}
+    # Group by the live option lists, plus any values present on companies that
+    # aren't in the list anymore (e.g. after a removal) so no count is lost.
+    def _grouped(col, kind):
+        names = get_options(conn, kind)
+        present = sorted({r[col] for r in rows if r[col]})
+        names = names + [v for v in present if v not in names]
+        return {n: sum(1 for r in rows if r[col] == n) for n in names}
+
+    by_province = _grouped("province_city", "province")
+    by_sector = _grouped("sector", "sector")
 
     follow = {"OVERDUE": 0, "DUE TODAY": 0, "Upcoming": 0}
     for r in rows:

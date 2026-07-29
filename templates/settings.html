@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Ajustes — Outreach · CRM{% endblock %}
+{% block content %}
+
+<div class="lbl" style="color:var(--color-accent)">Listas editables</div>
+<h1 class="page" style="margin:7px 0 4px">Ajustes</h1>
+<p style="font:400 12.5px/1.5 var(--font-body);color:var(--ink-3);margin:0 0 20px">
+  Añade, renombra o quita sectores y provincias. Al renombrar, las empresas que ya
+  usaban ese valor se actualizan solas. Quitar uno solo lo oculta de los menús; las
+  empresas conservan su valor.
+</p>
+
+{% set groups = [('sector', 'Sectores', sectors), ('province', 'Provincias', provinces)] %}
+{% for kind, label, items in groups %}
+<h3 class="sec" style="margin-top:22px">{{ label }}</h3>
+<div style="border:1px solid var(--color-divider);border-radius:var(--radius-md);padding:14px 16px;margin-top:10px">
+  <div class="opt-list">
+    {% for item in items %}
+    <div class="opt-row">
+      <form method="post" action="{{ url_for('settings') }}" class="opt-edit">
+        <input type="hidden" name="kind" value="{{ kind }}">
+        <input type="hidden" name="action" value="rename">
+        <input type="hidden" name="option_id" value="{{ item.id }}">
+        <input name="name" value="{{ item.name }}" aria-label="Nombre">
+        <button type="submit" class="btn sm">Guardar</button>
+      </form>
+      <form method="post" action="{{ url_for('settings') }}"
+            onsubmit="return confirm('¿Quitar “{{ item.name }}” de la lista?');">
+        <input type="hidden" name="kind" value="{{ kind }}">
+        <input type="hidden" name="action" value="remove">
+        <input type="hidden" name="option_id" value="{{ item.id }}">
+        <button type="submit" class="btn sm remove" aria-label="Quitar">✕</button>
+      </form>
+    </div>
+    {% endfor %}
+    {% if not items %}<p class="hint">Lista vacía — añade el primero abajo.</p>{% endif %}
+  </div>
+
+  <form method="post" action="{{ url_for('settings') }}" class="opt-add">
+    <input type="hidden" name="kind" value="{{ kind }}">
+    <input type="hidden" name="action" value="add">
+    <input name="name" placeholder="Añadir {{ label[:-2]|lower if label.endswith('es') else label|lower }}…"
+           autocomplete="off" required>
+    <button type="submit" class="btn primary sm">Añadir</button>
+  </form>
+</div>
+{% endfor %}
+
+<p style="margin-top:22px"><a href="{{ url_for('companies') }}">← Empresas</a></p>
+
+{% endblock %}

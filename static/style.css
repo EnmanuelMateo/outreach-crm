@@ -224,7 +224,11 @@ input, select, textarea {
 input::placeholder, textarea::placeholder { color: var(--ink-3); }
 input:focus, select:focus, textarea:focus { outline: none; border-color: var(--color-accent); }
 input.lead { border-color: var(--color-accent); font-size: 16px; }
-select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='7'%3E%3Cpath d='M1 1l4.5 4.5L10 1' stroke='%23e1ad66' stroke-width='1.4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 13px center; padding-right: 34px; }
+select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='7'%3E%3Cpath d='M1 1l4.5 4.5L10 1' stroke='%23e1ad66' stroke-width='1.4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 13px center; padding-right: 34px; color-scheme: dark; }
+/* Native dropdown popup: force a readable dark panel with bright option text
+   (default inheritance renders the options dim on this theme). */
+select option { background-color: #262420; color: var(--color-text); }
+select option:checked { background-color: #3a352c; color: var(--color-accent); }
 input[type="date"] { color-scheme: dark; }
 textarea { min-height: 66px; resize: vertical; line-height: 1.5; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -261,6 +265,17 @@ details.more:not([open]) > summary .tog::after { content: " ▾"; }
 .btn-stack { margin-top: 20px; display: flex; flex-direction: column; gap: 9px; }
 .actions { display: flex; gap: 10px; margin-top: 20px; }
 .actions .btn { flex: 1; }
+
+/* ── Settings (editable option lists) ─────────────────────────────────── */
+.opt-list { margin-top: 10px; }
+.opt-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--color-divider); }
+.opt-row:last-of-type { border-bottom: 0; }
+.opt-edit { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+.opt-edit input { flex: 1; min-width: 0; padding: 9px 11px; }
+.opt-add { display: flex; gap: 8px; margin-top: 14px; }
+.opt-add input { flex: 1; padding: 11px 12px; }
+.btn.remove { width: auto; padding: 9px 12px; color: var(--st-red); border-color: var(--color-divider); }
+.btn.remove:hover { border-color: var(--st-red); background: color-mix(in srgb, var(--st-red) 10%, transparent); }
 
 /* ── FAB (mobile) ─────────────────────────────────────────────────────── */
 .fab { position: fixed; right: 16px; bottom: calc(18px + env(safe-area-inset-bottom)); z-index: 30;

@@ -4,7 +4,18 @@ Single source of truth for the enums (matching DR_Outreach_Tracker.xlsx Lists ta
 and the two computed fields the spreadsheet recomputes live (follow_up_status,
 stage_order). Imported by both the Flask app and the seed import script.
 """
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
+
+# The app is used from the Dominican Republic (UTC-4, no DST). Production runs on
+# Render in UTC, so we must anchor "today" to DR time — otherwise in the evening
+# the server's date is already tomorrow and follow-ups read a day off.
+LOCAL_TZ = ZoneInfo("America/Santo_Domingo")
+
+
+def today():
+    """Today's date in the founder's timezone (not the server's UTC)."""
+    return datetime.now(LOCAL_TZ).date()
 
 # --- Enums (exact values, order matters for pipeline stages) ---------------
 
@@ -48,8 +59,8 @@ def stage_order(stage):
     return STAGE_ORDER.get(stage, 0)
 
 
-def follow_up_status(next_follow_up_date, today=None):
-    """Compute follow-up status from the next follow-up date vs. today.
+def follow_up_status(next_follow_up_date, ref_today=None):
+    """Compute follow-up status from the next follow-up date vs. today (DR time).
 
     None date          -> None (blank/none)
     date before today  -> 'OVERDUE'
@@ -58,14 +69,14 @@ def follow_up_status(next_follow_up_date, today=None):
     """
     if not next_follow_up_date:
         return None
-    if today is None:
-        today = date.today()
+    if ref_today is None:
+        ref_today = today()
     d = _parse_date(next_follow_up_date)
     if d is None:
         return None
-    if d < today:
+    if d < ref_today:
         return "OVERDUE"
-    if d == today:
+    if d == ref_today:
         return "DUE TODAY"
     return "Upcoming"
 
