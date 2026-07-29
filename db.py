@@ -204,8 +204,20 @@ def get_company(conn, company_id, today=None):
     return _enrich(row, today) if row else None
 
 
+# Whitelisted sort fields → (column expression, default direction). User input is
+# never interpolated; anything unknown falls back to 'updated_at'.
+SORT_FIELDS = {
+    "updated_at": (companies.c.updated_at, "desc"),
+    "created_at": (companies.c.created_at, "desc"),
+    "name": (func.lower(companies.c.company_name), "asc"),
+    "next_follow_up": (companies.c.next_follow_up_date, "asc"),
+    "stage": (companies.c.current_stage, "asc"),
+    "deal_value": (companies.c.deal_value_dop, "desc"),
+}
+
+
 def list_companies(conn, province=None, sector=None, stage=None, search=None,
-                   sort="updated_at", today=None):
+                   sort="updated_at", direction=None, today=None):
     stmt = select(companies)
     if province:
         stmt = stmt.where(companies.c.province_city == province)
@@ -216,15 +228,12 @@ def list_companies(conn, province=None, sector=None, stage=None, search=None,
     if search:
         stmt = stmt.where(companies.c.company_name.ilike(f"%{search}%"))
 
-    if sort == "name":
-        stmt = stmt.order_by(func.lower(companies.c.company_name).asc())
-    elif sort == "next_follow_up":
-        stmt = stmt.order_by(companies.c.next_follow_up_date.is_(None),
-                             companies.c.next_follow_up_date.asc())
-    elif sort == "stage":
-        stmt = stmt.order_by(companies.c.current_stage.asc())
-    else:
-        stmt = stmt.order_by(companies.c.updated_at.desc())
+    col, default_dir = SORT_FIELDS.get(sort, SORT_FIELDS["updated_at"])
+    if direction not in ("asc", "desc"):
+        direction = default_dir
+    ordered = col.asc() if direction == "asc" else col.desc()
+    # NULLs (e.g. no follow-up date / no deal value) always sink to the bottom.
+    stmt = stmt.order_by(col.is_(None), ordered)
 
     return [_enrich(r, today) for r in conn.execute(stmt).mappings().all()]
 

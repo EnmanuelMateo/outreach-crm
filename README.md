@@ -95,8 +95,17 @@ gh repo create outreach-crm --private --source=. --push   # or create it in the 
 ### 3. Render — connect and deploy
 1. At https://render.com: **New → Blueprint**, pick the GitHub repo. Render reads
    `render.yaml` and provisions the free web service.
-2. On the service, add the env var **`DATABASE_URL`** = your Supabase URI, then **Deploy**.
-   On boot the app creates the `companies` table in Postgres automatically.
+2. On the service, add these env vars, then **Deploy**:
+   - **`DATABASE_URL`** = your Supabase URI (creates the tables on first boot).
+   - **`SECRET_KEY`** = any long random string (signs the login session; without it you
+     get logged out on every restart).
+   - **`CRM_USER`** = your username, **`CRM_PASSWORD`** = your password. Setting these
+     turns on the login gate. *(Alternatively set `CRM_PASSWORD_HASH` from
+     `werkzeug.security.generate_password_hash` instead of the plaintext `CRM_PASSWORD`.)*
+
+**Login:** with `CRM_PASSWORD` (or `CRM_PASSWORD_HASH`) set, the whole app requires
+sign-in at `/login`; **Salir** logs out. Locally, if no password env is set, the gate is
+off so dev stays open. Change the password anytime by updating the Render env var.
 
 ### 4. Seed production once (from your laptop, pointing at Postgres)
 ```bash

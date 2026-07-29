@@ -1,14 +1,22 @@
-"""DR SMB Outreach CRM — single-user Flask app (no auth by design).
+"""DR SMB Outreach CRM — single-user Flask app.
 
 Run locally:   python app.py     (http://127.0.0.1:5000)
 Production:    gunicorn app:app   (see Dockerfile / README)
+
+Auth: single user gated by env vars. Set CRM_USER + CRM_PASSWORD (or
+CRM_PASSWORD_HASH) and SECRET_KEY to require login; if the password vars are
+unset (local dev) the login gate is disabled.
 """
 import csv
+import hmac
 import io
+import os
 import re
 from datetime import date, timedelta
 
-from flask import (Flask, Response, redirect, render_template, request, url_for)
+from flask import (Flask, Response, redirect, render_template, request, session,
+                   url_for)
+from werkzeug.security import check_password_hash
 
 import db
 from domain import (SECTORS, PROVINCES, SIZES, SOURCES, YN, STAGES, FUNNEL_STAGES,
@@ -16,7 +24,42 @@ from domain import (SECTORS, PROVINCES, SIZES, SOURCES, YN, STAGES, FUNNEL_STAGE
                     today as dr_today)
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(32)
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    # Only require HTTPS-only cookies in production (Postgres); local dev is http.
+    SESSION_COOKIE_SECURE=bool(os.environ.get("DATABASE_URL")),
+)
 db.init_db()
+
+# --- Auth (single user, credentials from env) ------------------------------
+
+CRM_USER = os.environ.get("CRM_USER", "admin")
+CRM_PASSWORD = os.environ.get("CRM_PASSWORD")
+CRM_PASSWORD_HASH = os.environ.get("CRM_PASSWORD_HASH")
+AUTH_ENABLED = bool(CRM_PASSWORD or CRM_PASSWORD_HASH)
+
+
+def _check_credentials(username, password):
+    if not AUTH_ENABLED:
+        return False
+    user_ok = hmac.compare_digest(username or "", CRM_USER)
+    if CRM_PASSWORD_HASH:
+        pass_ok = check_password_hash(CRM_PASSWORD_HASH, password or "")
+    else:
+        pass_ok = hmac.compare_digest(password or "", CRM_PASSWORD)
+    return user_ok and pass_ok
+
+
+@app.before_request
+def _require_login():
+    if not AUTH_ENABLED or session.get("user"):
+        return
+    if request.endpoint in ("login", "static"):
+        return
+    nxt = request.full_path if request.method == "GET" else None
+    return redirect(url_for("login", next=nxt))
 
 
 # --- Template helpers ------------------------------------------------------
@@ -36,6 +79,7 @@ def inject_globals():
         "FUNNEL_STAGES": FUNNEL_STAGES, "CURRENCY": CURRENCY_LABEL,
         "today_iso": t.isoformat(),
         "today_label": f"{_ES_DAYS[t.weekday()]} {t.day} {_ES_MONTHS[t.month]}",
+        "logged_in": bool(session.get("user")),
     }
 
 
@@ -180,6 +224,26 @@ def parse_csv_row(row, sectors, provinces):
 
 # --- Routes ----------------------------------------------------------------
 
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if not AUTH_ENABLED or session.get("user"):
+        return redirect(url_for("dashboard"))
+    error = None
+    if request.method == "POST":
+        if _check_credentials(request.form.get("username"), request.form.get("password")):
+            session["user"] = request.form.get("username")
+            return redirect(_safe_next(request.form.get("next"), url_for("dashboard")))
+        error = "Usuario o contraseña incorrectos."
+    return render_template("login.html", error=error,
+                           next=request.args.get("next", ""))
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
+
+
 @app.route("/")
 @app.route("/dashboard")
 def dashboard():
@@ -196,12 +260,14 @@ def companies():
         "stage": request.args.get("stage") or "",
         "search": request.args.get("search") or "",
         "sort": request.args.get("sort") or "updated_at",
+        "dir": request.args.get("dir") if request.args.get("dir") in ("asc", "desc") else "",
     }
     open_id = request.args.get("open", type=int)
     with db.engine.connect() as conn:
         rows = db.list_companies(
             conn, province=f["province"] or None, sector=f["sector"] or None,
-            stage=f["stage"] or None, search=f["search"] or None, sort=f["sort"])
+            stage=f["stage"] or None, search=f["search"] or None,
+            sort=f["sort"], direction=f["dir"] or None)
         selected = db.get_company(conn, open_id) if open_id else None
     return render_template("companies.html", rows=rows, f=f, selected=selected,
                            active="companies")
@@ -309,7 +375,8 @@ def companies_csv():
             sector=request.args.get("sector") or None,
             stage=request.args.get("stage") or None,
             search=request.args.get("search") or None,
-            sort=request.args.get("sort") or "updated_at")
+            sort=request.args.get("sort") or "updated_at",
+            direction=request.args.get("dir") or None)
 
     fields = [
         "id", "company_name", "sector", "province_city", "address",

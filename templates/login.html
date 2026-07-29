@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#201f1d">
+  <meta name="color-scheme" content="dark">
+  <title>Entrar — Outreach · CRM</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🕯️</text></svg>">
+</head>
+<body>
+  <main class="login-wrap">
+    <div class="login-card">
+      <span class="brand" style="margin:0 0 4px">Outreach<span class="dot"> · </span>CRM</span>
+      <h1 style="font-size:26px;font-weight:400;margin:6px 0 18px">Entrar</h1>
+
+      {% if error %}<div class="login-error">{{ error }}</div>{% endif %}
+
+      <form method="post" action="{{ url_for('login') }}">
+        <input type="hidden" name="next" value="{{ next }}">
+        <label for="username">Usuario</label>
+        <input id="username" name="username" autocomplete="username" autofocus required>
+        <label for="password">Contraseña</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+        <button type="submit" class="btn primary" style="margin-top:20px">Entrar</button>
+      </form>
+    </div>
+  </main>
+</body>
+</html>

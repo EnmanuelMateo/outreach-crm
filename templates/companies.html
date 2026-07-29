@@ -14,6 +14,7 @@
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink-3)" stroke-width="1.5" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M16.5 16.5 21 21"/></svg>
         <input type="search" name="search" placeholder="Buscar por nombre…" value="{{ f.search }}">
       </div>
+      <div class="flabel" style="margin:10px 0 6px">Filtrar</div>
       <div class="filter-grid">
         <select name="province" onchange="this.form.submit()">
           <option value="">Toda provincia</option>
@@ -27,11 +28,22 @@
           <option value="">Toda etapa</option>
           {% for s in STAGES %}<option value="{{ s }}" {{ 'selected' if f.stage==s }}>{{ s }}</option>{% endfor %}
         </select>
+      </div>
+
+      <div class="sort-row">
+        <span class="sort-label">Ordenar por</span>
         <select name="sort" onchange="this.form.submit()">
           <option value="updated_at" {{ 'selected' if f.sort=='updated_at' }}>Actualizado</option>
-          <option value="name" {{ 'selected' if f.sort=='name' }}>Nombre A-Z</option>
-          <option value="next_follow_up" {{ 'selected' if f.sort=='next_follow_up' }}>Próx. seguim.</option>
+          <option value="created_at" {{ 'selected' if f.sort=='created_at' }}>Añadido</option>
+          <option value="name" {{ 'selected' if f.sort=='name' }}>Nombre</option>
+          <option value="next_follow_up" {{ 'selected' if f.sort=='next_follow_up' }}>Próx. seguimiento</option>
           <option value="stage" {{ 'selected' if f.sort=='stage' }}>Etapa</option>
+          <option value="deal_value" {{ 'selected' if f.sort=='deal_value' }}>Valor del trato</option>
+        </select>
+        <select name="dir" onchange="this.form.submit()" aria-label="Dirección del orden">
+          <option value="" {{ 'selected' if not f.dir }}>Automático</option>
+          <option value="asc" {{ 'selected' if f.dir=='asc' }}>Ascendente ↑</option>
+          <option value="desc" {{ 'selected' if f.dir=='desc' }}>Descendente ↓</option>
         </select>
       </div>
     </form>
@@ -41,7 +53,7 @@
       <span class="acts">
         {% if f.province or f.sector or f.stage or f.search %}<a class="plain" href="{{ url_for('companies') }}">Limpiar</a>{% endif %}
         <a href="{{ url_for('company_import') }}">↑ Importar</a>
-        <a href="{{ url_for('companies_csv', province=f.province, sector=f.sector, stage=f.stage, search=f.search, sort=f.sort) }}">↓ CSV</a>
+        <a href="{{ url_for('companies_csv', province=f.province, sector=f.sector, stage=f.stage, search=f.search, sort=f.sort, dir=f.dir) }}">↓ CSV</a>
       </span>
     </div>
 

@@ -17,6 +17,7 @@
         <a href="{{ url_for('dashboard') }}" class="{{ 'on' if active=='dashboard' }}">Panel</a>
         <a href="{{ url_for('companies') }}" class="{{ 'on' if active in ['companies','new'] }}">Empresas</a>
         <a href="{{ url_for('settings') }}" class="{{ 'on' if active=='settings' }}">Ajustes</a>
+        {% if logged_in %}<a href="{{ url_for('logout') }}">Salir</a>{% endif %}
       </nav>
       <a class="nav-new" href="{{ url_for('company_new') }}">+ Nueva empresa</a>
     </div>
